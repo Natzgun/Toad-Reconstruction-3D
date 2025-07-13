@@ -1,12 +1,26 @@
-#include "glad/glad.h"
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <ModelLoader.h>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/fwd.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <ostream>
+#include <vector>
 
 // GLobal Variables
 // Shaders
 unsigned int vertexShader, fragmentShader, shaderProgram;
+
+
+unsigned int VBO, VAO;
+
+
+float rotationX = 0.0f, rotationY = 0.0f;
+float lastX = 400, lastY = 300;
+bool firstMouse = true;
 
 // Vertex Buffer obejects
 
@@ -16,15 +30,25 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 const char *vertexShaderSource =
     "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 view;\n"
+    "uniform mat4 projection;\n"
     "void main() {\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "   gl_Position = projection * view * model * vec4(aPos, 1.0);\n"
     "}\0";
+
+// const char *vertexShaderSource = "#version 330 core\n"
+//   "layout (location = 0) in vec3 aPos;\n"
+//   "void main() {\n"
+//   "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+//   "}\0";
 
 const char *fragmentShaderSource =
     "#version 330 core\n"
     "out vec4 FragColor;\n"
+    "uniform vec3 color;\n"
     "void main() {\n"
-    "    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "    FragColor = vec4(color, 1.0);\n"
     "}\0";
 
 void loadShaders() {
@@ -90,6 +114,97 @@ void loadShaders() {
   glDeleteShader(fragmentShader);
 }
 
+void setupBuffers(const std::vector<glm::vec3> &vertex) {
+  /* ------------ SETUP VERTEX DATA ------------*/
+  /* Verices del triangulo pero estas coordenadas estan en NDC (Normalized
+   * Device Corrdinates) que van desde -1.0 hasta 1.0, cualquier valor fuera de
+   * este rango OpenGL no los mostrará*/
+
+  std::vector<float> vertexData;
+  vertexData.reserve(vertex.size() * 3);
+  for (const auto &v : vertex) {
+    vertexData.insert(vertexData.end(), {v.x, v.y, v.z});
+  }
+
+  glGenVertexArrays(1, &VAO);
+  glGenBuffers(1, &VBO);
+
+  glBindVertexArray(VAO);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float),
+               vertexData.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+
+  glBindVertexArray(0);
+}
+
+void render(const int vertexCount) {
+  // Draw the object
+  glUseProgram(shaderProgram);
+
+  // Camera
+
+  glm::mat4 model = glm::mat4(1.0f);
+
+  model =
+      glm::rotate(model, glm::radians(rotationX), glm::vec3(1.0f, 0.0f, 0.0f));
+  model =
+      glm::rotate(model, glm::radians(rotationY), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  // model = glm::scale(model, glm::vec3(1.0f));
+
+  glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f),
+                               glm::vec3(0.0f, 1.0f, 0.0f));
+  glm::mat4 proj =
+      glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+
+// glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 500.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+// glm::mat4 proj = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 1000.0f);
+
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE,
+                     glm::value_ptr(model));
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE,
+                     glm::value_ptr(view));
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1,
+                     GL_FALSE, glm::value_ptr(proj));
+
+
+  glUniform3f(glGetUniformLocation(shaderProgram, "color"), 1.0f, 0.0f, 0.0f);
+  // Aqui le decimos que use el VAO con la configuracion que ya guardamos
+  // antes
+  glBindVertexArray(VAO);
+
+  glPointSize(2.0f);
+
+  /* Dibuja primitivas utilizando el shader actualmente activo */
+  /* Primer argumento, tipo primitivo de OpenGL, el segundo elemento
+   * especifica el índice inicial del array de vertices, el último parametro
+   * especifica cuántos verttices queremos dibujar que es 3, ya que nuestro
+   * arreglo de vertices tiene exactamente 3 vertices */
+  glDrawArrays(GL_POINTS, 0, vertexCount);
+}
+
+
+void mouse_callback(GLFWwindow *window, double x, double y) {
+  if (firstMouse) {
+    lastX = x;
+    lastY = y;
+    firstMouse = false;
+  }
+
+  rotationY += (x - lastX) * 0.5f;
+  rotationX += (lastY - y) * 0.5f;
+  lastX = x;
+  lastY = y;
+
+  if (rotationX > 89.0f)
+    rotationX = 89.0f;
+  if (rotationX < -89.0f)
+    rotationX = -89.0f;
+}
+
 int main(int argc, char *argv[]) {
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -109,56 +224,28 @@ int main(int argc, char *argv[]) {
    * contexto principal del hilo actual*/
   glfwMakeContextCurrent(window);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+  glfwSetCursorPosCallback(window, mouse_callback);
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Fail to initialize GLAD" << std::endl;
     return -1;
   }
+  glEnable(GL_DEPTH_TEST);
 
   loadShaders();
 
-  /* ------------ SETUP VERTEX DATA ------------*/
-  /* Verices del triangulo pero estas coordenadas estan en NDC (Normalized
-   * Device Corrdinates) que van desde -1.0 hasta 1.0, cualquier valor fuera de
-   * este rango OpenGL no los mostrará*/
-  float vertices[] = {
-      -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f,
-  };
-
-  /* Aqui creamos un Vertex buffer object, generamos ese buffer que viene desde
-   * la la GPU es como si reservaramos memoria*/
-  unsigned int VBO, VAO;
-  glGenBuffers(1, &VBO);
-  /* Vertex Array Object (VAO)*/
-  /* Una VAO nos sirve para almacenar configuracion de nuestros atributos de
-   * vertice y que VBO usar*/
-  glGenVertexArrays(1, &VAO);
-
-  /*Vinculamos el VAO*/
-  glBindVertexArray(VAO);
-
-  /* Ahora enlazamos ese buffer a su tipo correspondiente en OpenGL que vendria
-   * ser GL_ARRAY_BUFFER, entonces cuando modifiquemos GL_ARRAY_BUFFER vamos a
-   * estar modificando  VBO*/
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-  /* Transfiere los vertices en el rango NDC hacia el buffer de vertexs, el
-   * ultimo parametro es para indicarle como debemos manejar la GPU, en este
-   * caso GL_STATIC_DRAW setea los valores una vez y lo usamos muchas veces */
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-  /*Le decimos a OpenGL como debe interpretar los datos del vertex,
-   * (configurarmos los atributos de vertice)*/
-  // Todo esto quedara guardado en el VAO
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-  glEnableVertexAttribArray(0);
 
   ModelLoader loader;
   std::vector<glm::vec3> vertex;
   std::vector<glm::vec2> uvs;
   std::vector<glm::vec3> normals;
 
-  loader.loadOBJ("../../ratita.obj", vertex, uvs, normals);
+
+  loader.loadOBJ("../../cat.obj", vertex, uvs, normals);
+
+  int sizeVertex = vertex.size();
+  std::cout << sizeVertex << std::endl;
+  setupBuffers(vertex);
 
   // ahora puedes usar 'vertices' para crear tu VAO/VBO
 
@@ -176,20 +263,9 @@ int main(int argc, char *argv[]) {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     /* Borra el contenido del color buffer osea del frame anterior y lo rellena
      * con el color definido por glClearColor*/
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Draw the object
-    glUseProgram(shaderProgram);
-    // Aqui le decimos que use el VAO con la configuracion que ya guardamos
-    // antes
-    glBindVertexArray(VAO);
-
-    /* Dibuja primitivas utilizando el shader actualmente activo */
-    /* Primer argumento, tipo primitivo de OpenGL, el segundo elemento
-     * especifica el índice inicial del array de vertices, el último parametro
-     * especifica cuántos verttices queremos dibujar que es 3, ya que nuestro
-     * arreglo de vertices tiene exactamente 3 vertices */
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    render(sizeVertex);
 
     /* glfwSwapBuffers(window) intercambia el back buffer (donde OpenGL dibuja)
     con el front buffer (lo que se ve en pantalla). Durante cada frame, todo

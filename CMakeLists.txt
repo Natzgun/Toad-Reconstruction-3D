@@ -3,7 +3,6 @@ project(OpenGL-project)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# Agrega tu directorio de headers (glad, etc.)
 include_directories(include)
 
 # GLAD como biblioteca

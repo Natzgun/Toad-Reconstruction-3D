@@ -45,7 +45,7 @@ public:
       string type;
       iss >> type;
 
-      std::cout << type << " daaaaaaa\n";
+      // std::cout << type << " daaaaaaa\n";
 
       if (type == "v") {
         glm::vec3 vertex;
