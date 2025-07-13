@@ -19,8 +19,18 @@ unsigned int VBO, VAO;
 
 
 float rotationX = 0.0f, rotationY = 0.0f;
-float lastX = 400, lastY = 300;
+glm::vec3 cameraPos = glm::vec3(250.0f, 200.0f, 600.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+float yaw = -90.0f;
+float pitch = 0.0f;
+
+float lastX = 400.0f, lastY = 300.0f;
 bool firstMouse = true;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 // Vertex Buffer obejects
 
@@ -159,11 +169,7 @@ void render(const int vertexCount) {
 
   // model = glm::scale(model, glm::vec3(1.0f));
 
-  glm::mat4 view = glm::lookAt(
-    glm::vec3(0.0f, 0.0f, 100.0f),
-    glm::vec3(0.0f),
-    glm::vec3(0.0f, 1.0f, 0.0f)
-  );
+  glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
   glm::mat4 proj = glm::perspective(
     glm::radians(45.0f),
@@ -197,24 +203,38 @@ void render(const int vertexCount) {
   glDrawArrays(GL_POINTS, 0, vertexCount);
 }
 
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
 
-void mouse_callback(GLFWwindow *window, double x, double y) {
-  if (firstMouse) {
-    lastX = x;
-    lastY = y;
-    firstMouse = false;
-  }
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; 
 
-  rotationY += (x - lastX) * 0.5f;
-  rotationX += (lastY - y) * 0.5f;
-  lastX = x;
-  lastY = y;
+    lastX = xpos;
+    lastY = ypos;
 
-  if (rotationX > 89.0f)
-    rotationX = 89.0f;
-  if (rotationX < -89.0f)
-    rotationX = -89.0f;
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
 }
+
 
 int main(int argc, char *argv[]) {
   glfwInit();
@@ -236,6 +256,7 @@ int main(int argc, char *argv[]) {
   glfwMakeContextCurrent(window);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
   glfwSetCursorPosCallback(window, mouse_callback);
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Fail to initialize GLAD" << std::endl;
@@ -252,7 +273,7 @@ int main(int argc, char *argv[]) {
   std::vector<glm::vec3> normals;
 
 
-  loader.loadOBJ("../../cat.obj", vertex, uvs, normals);
+  loader.loadOBJ("../../images/skeletonMasks.obj", vertex, uvs, normals);
 
   int sizeVertex = vertex.size();
   std::cout << sizeVertex << std::endl;
@@ -276,6 +297,12 @@ int main(int argc, char *argv[]) {
      * con el color definido por glClearColor*/
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    float currentFrame = glfwGetTime();
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    // std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
+
     render(sizeVertex);
 
     /* glfwSwapBuffers(window) intercambia el back buffer (donde OpenGL dibuja)
@@ -295,11 +322,21 @@ int main(int argc, char *argv[]) {
 }
 
 void processInput(GLFWwindow *window) {
-  /* Aqui verificamos si el ultimo estado del teclado ha sido presionado para
-   * una ventana especifica*/
-  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+  float cameraSpeed = 50.0f * deltaTime;
+
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    cameraPos += cameraSpeed * cameraFront;
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    cameraPos -= cameraSpeed * cameraFront;
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    cameraPos -=
+        glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    cameraPos +=
+        glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
-  }
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {

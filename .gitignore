@@ -6,3 +6,4 @@ build
 *.obj
 compile_commands.json
 .idea
+*.out
