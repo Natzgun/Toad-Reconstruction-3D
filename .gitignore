@@ -1,0 +1,8 @@
+out
+cmake-build-debug
+build
+.vscode
+.cache
+*.obj
+compile_commands.json
+.idea
