@@ -1,6 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <ModelLoader.h>
+#include <MarchingCubes.h>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/fwd.hpp>
 #include <glm/glm.hpp>
@@ -200,7 +201,7 @@ void render(const int vertexCount) {
    * especifica el índice inicial del array de vertices, el último parametro
    * especifica cuántos verttices queremos dibujar que es 3, ya que nuestro
    * arreglo de vertices tiene exactamente 3 vertices */
-  glDrawArrays(GL_POINTS, 0, vertexCount);
+  glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -267,19 +268,64 @@ int main(int argc, char *argv[]) {
   loadShaders();
 
 
+// === Cargar modelo OBJ ===
   ModelLoader loader;
   std::vector<glm::vec3> vertex;
   std::vector<glm::vec2> uvs;
   std::vector<glm::vec3> normals;
-
-
   loader.loadOBJ("../../images/skeletonMasks.obj", vertex, uvs, normals);
+  std::cout << "Modelo cargado con " << vertex.size() << " vértices" << std::endl;
 
-  int sizeVertex = vertex.size();
-  std::cout << sizeVertex << std::endl;
-  setupBuffers(vertex);
+  // === Voxelizar modelo ===
+  int volumeWidth = 256, volumeHeight = 256, volumeDepth = 256;
+  std::vector<float> scalarField(volumeWidth * volumeHeight * volumeDepth, 0.0f);
+
+  glm::vec3 minBound(FLT_MAX), maxBound(-FLT_MAX);
+  for (const auto& v : vertex) {
+    minBound = glm::min(minBound, v);
+    maxBound = glm::max(maxBound, v);
+  }
+
+  glm::vec3 size = maxBound - minBound;
+  float padding = 2.0f;
+  glm::vec3 scale = glm::vec3(volumeWidth - padding, volumeHeight - padding, volumeDepth - padding) / size;
+
+  for (const auto& v : vertex) {
+    glm::vec3 scaledPos = (v - minBound) * scale;
+    int x = static_cast<int>(scaledPos.x);
+    int y = static_cast<int>(scaledPos.y);
+    int z = static_cast<int>(scaledPos.z);
+
+    int radius = 2;  // "grosor" del esqueleto voxelizado
+    for (int dz = -radius; dz <= radius; ++dz) {
+      for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+          int nx = x + dx;
+          int ny = y + dy;
+          int nz = z + dz;
+          if (nx >= 0 && ny >= 0 && nz >= 0 &&
+              nx < volumeWidth && ny < volumeHeight && nz < volumeDepth) {
+            int index = nx + ny * volumeWidth + nz * volumeWidth * volumeHeight;
+            scalarField[index] = 1.0f;
+          }
+        }
+      }
+    }
+  }
+
+  // === Marching Cubes ===
+  std::vector<glm::vec3> triangleVertices;
+  float isoLevel = 0.5f;
+  marchingCubes(scalarField, volumeWidth, volumeHeight, volumeDepth, isoLevel, triangleVertices);
+  std::cout << "Marching Cubes generó " << triangleVertices.size() / 3 << " triángulos" << std::endl;
+
+  // === Enviar a GPU ===
+  setupBuffers(triangleVertices);
+  int sizeVertex = triangleVertices.size();
 
   // ahora puedes usar 'vertices' para crear tu VAO/VBO
+
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
   /* La condicion revisa en cada loop si hay una instruccion que va cerrar la
    * ventana */
